@@ -16,6 +16,17 @@ pub enum InstallerChoice {
     Uv,
 }
 
+/// When to use colored output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ColorMode {
+    /// Color when writing to a terminal (respects `NO_COLOR`).
+    Auto,
+    /// Always color.
+    Always,
+    /// Never color.
+    Never,
+}
+
 /// Smart Python requirements checker: validates, installs and tidies your dependencies.
 #[derive(Debug, Parser)]
 #[command(
@@ -85,6 +96,10 @@ pub struct Cli {
         default_missing_value = "."
     )]
     pub scan: Option<PathBuf>,
+
+    /// When to use colors
+    #[arg(long, value_enum, default_value_t = ColorMode::Auto, value_name = "WHEN")]
+    pub color: ColorMode,
 
     /// Print a machine-readable JSON report instead of a table (never installs)
     #[arg(long)]

@@ -67,6 +67,7 @@ reqtidy --scan=src -r        # find imports in ./src that requirements.txt does 
 | `--python PATH` | Interpreter to inspect/install into (default: active venv, then `python3`/`python`) |
 | `--installer auto\|pip\|uv` | Installation backend |
 | `--scan[=DIR]` | Report imports missing from the requirements file |
+| `--color auto\|always\|never` | Color policy (`auto` honours `NO_COLOR` and non-terminals) |
 | `--json` | JSON output, never installs |
 | `--notify` | Desktop notification (needs the `notify` feature) |
 
@@ -97,8 +98,11 @@ package does not block the rest.
 
 ### Known limitations
 
-* Editable installs (`-e`) and VCS/URL lines without `name @` are reported as
-  warnings and skipped.
+* Editable installs (`-e`) are reported as warnings and skipped.
+* Bare VCS/URL lines (`git+https://github.com/user/repo`) are checked: the
+  package is matched through the source URL pip recorded at install time
+  (`direct_url.json`), falling back to a name derived from the URL or `#egg=`.
+  If a different name than the repo's is used, add `#egg=NAME` to the line.
 * Extras of an already-installed package are not verified.
 * `--scan` uses a line-based import detector (imports inside docstrings can be
   false positives) and needs Python 3.10+ to recognise the standard library.

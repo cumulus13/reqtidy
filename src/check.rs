@@ -6,7 +6,8 @@ use std::str::FromStr;
 use serde::Serialize;
 
 use crate::pep440::Version;
-use crate::requirement::Requirement;
+use crate::python::Installed;
+use crate::requirement::{normalize_url, Requirement};
 
 /// Outcome of checking one requirement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -60,11 +61,11 @@ pub struct CheckResult {
 
 /// Checks every requirement against the marker environment and installed set.
 ///
-/// `installed` maps normalised distribution names to versions.
+/// `installed` describes the target environment (see [`Installed`]).
 pub fn check_all(
     requirements: &[Requirement],
     markers: &HashMap<String, String>,
-    installed: &HashMap<String, String>,
+    installed: &Installed,
 ) -> Vec<CheckResult> {
     requirements
         .iter()
@@ -75,9 +76,15 @@ pub fn check_all(
 fn check_one(
     req: &Requirement,
     markers: &HashMap<String, String>,
-    installed: &HashMap<String, String>,
+    installed: &Installed,
 ) -> CheckResult {
-    let installed_version = installed.get(&req.normalized_name()).cloned();
+    // For URL requirements the recorded install source is the most reliable match.
+    let by_url = req
+        .url
+        .as_deref()
+        .and_then(|url| installed.urls.get(&normalize_url(url)));
+    let by_name = installed.versions.get(&req.normalized_name());
+    let installed_version: Option<String> = by_url.or(by_name).cloned();
     let required = match (&req.url, req.specifiers.is_empty()) {
         (Some(url), _) => format!("@ {url}"),
         (None, true) => "any".to_string(),
@@ -106,10 +113,12 @@ fn check_one(
     };
 
     if req.url.is_some() {
-        return result(
-            Status::Ok,
-            "Installed (direct reference, version not verified)".to_string(),
-        );
+        let detail = if by_url.is_some() {
+            "Installed from this URL"
+        } else {
+            "Installed (matched by name, source not verified)"
+        };
+        return result(Status::Ok, detail.to_string());
     }
     if req.specifiers.is_empty() {
         return result(Status::Ok, "OK (any version)".to_string());
@@ -159,12 +168,15 @@ mod tests {
             "weird>=1.0",
         ]);
         let markers = map(&[("sys_platform", "linux")]);
-        let installed = map(&[
-            ("requests", "2.28.1"),
-            ("pandas", "1.2.0"),
-            ("flask", "3.0.0"),
-            ("weird", "not-a-version"),
-        ]);
+        let installed = Installed {
+            versions: map(&[
+                ("requests", "2.28.1"),
+                ("pandas", "1.2.0"),
+                ("flask", "3.0.0"),
+                ("weird", "not-a-version"),
+            ]),
+            urls: HashMap::new(),
+        };
         let results = check_all(&requirements, &markers, &installed);
         let statuses: Vec<Status> = results.iter().map(|r| r.status).collect();
         assert_eq!(
@@ -182,5 +194,26 @@ mod tests {
         assert_eq!(results[1].install_spec, "numpy>=1.20.0");
         assert_eq!(results[2].detail, "Mismatch (need ==1.3.0)");
         assert_eq!(results[4].detail, "OK (any version)");
+    }
+
+    #[test]
+    fn vcs_requirements_match_by_recorded_url() {
+        let present = Requirement::from_bare_url("git+https://github.com/cumulus13/mimelist")
+            .unwrap_or_else(|e| panic!("{e}"));
+        let absent = Requirement::from_bare_url("git+https://github.com/cumulus13/uptobox")
+            .unwrap_or_else(|e| panic!("{e}"));
+        let installed = Installed {
+            versions: map(&[("mimelist", "1.0")]),
+            urls: map(&[("https://github.com/cumulus13/mimelist", "1.0")]),
+        };
+        let results = check_all(&[present, absent], &HashMap::new(), &installed);
+        assert_eq!(results[0].status, Status::Ok);
+        assert_eq!(results[0].detail, "Installed from this URL");
+        assert_eq!(results[0].installed.as_deref(), Some("1.0"));
+        assert_eq!(results[1].status, Status::Missing);
+        assert_eq!(
+            results[1].install_spec,
+            "git+https://github.com/cumulus13/uptobox"
+        );
     }
 }

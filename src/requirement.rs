@@ -44,6 +44,9 @@ pub struct Requirement {
     pub marker: Option<Marker>,
     /// Source location.
     pub origin: Origin,
+    /// `true` for bare VCS/URL lines (`git+https://...`) whose package name
+    /// was derived from the URL rather than written by the user.
+    pub name_guessed: bool,
 }
 
 /// Normalises a distribution name as described in PEP 503
@@ -80,9 +83,125 @@ impl Requirement {
             format!("[{}]", self.extras.join(","))
         };
         match &self.url {
+            Some(url) if self.name_guessed => url.clone(),
             Some(url) => format!("{}{} @ {}", self.name, extras, url),
             None => format!("{}{}{}", self.name, extras, self.specifiers),
         }
+    }
+
+    /// Parses a bare VCS/URL requirement line such as
+    /// `git+https://github.com/user/repo` or `https://host/pkg-1.0.whl`.
+    ///
+    /// The package name comes from `#egg=NAME` if present, otherwise from the
+    /// last path segment of the URL.
+    pub fn from_bare_url(line: &str) -> Result<Self, RequirementParseError> {
+        let url = line.trim();
+        let name = guess_name_from_url(url).ok_or_else(|| {
+            RequirementParseError(format!(
+                "cannot determine a package name from the URL: {url:?} (add #egg=NAME)"
+            ))
+        })?;
+        Ok(Requirement {
+            name,
+            extras: Vec::new(),
+            specifiers: SpecifierSet::default(),
+            url: Some(url.to_string()),
+            marker: None,
+            origin: Origin::default(),
+            name_guessed: true,
+        })
+    }
+}
+
+fn is_valid_name(name: &str) -> bool {
+    let first = name.chars().next();
+    let last = name.chars().next_back();
+    first.is_some_and(|c| c.is_ascii_alphanumeric())
+        && last.is_some_and(|c| c.is_ascii_alphanumeric())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+fn strip_archive_extension(file: &str) -> Option<&str> {
+    let lower = file.to_ascii_lowercase();
+    [".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".zip"]
+        .iter()
+        .find(|ext| lower.ends_with(**ext))
+        .map(|ext| &file[..file.len() - ext.len()])
+}
+
+/// Derives a package name from a VCS or archive URL.
+fn guess_name_from_url(url: &str) -> Option<String> {
+    let (without_fragment, fragment) = match url.split_once('#') {
+        Some((head, tail)) => (head, Some(tail)),
+        None => (url, None),
+    };
+    if let Some(fragment) = fragment {
+        for part in fragment.split('&') {
+            if let Some(egg) = part.strip_prefix("egg=") {
+                let name = egg.split('[').next().unwrap_or("").trim();
+                if is_valid_name(name) {
+                    return Some(name.to_string());
+                }
+            }
+        }
+    }
+    let path = without_fragment
+        .split('?')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('/');
+    // A URL without a path below the host has no package name in it.
+    let after_scheme = path.split_once("://").map_or(path, |(_, rest)| rest);
+    if !after_scheme.contains('/') {
+        return None;
+    }
+    let last = path.rsplit('/').next().unwrap_or("");
+    // Drop a trailing `@ref` (branch, tag or commit).
+    let last = last.split('@').next().unwrap_or("");
+
+    let candidate = if last.to_ascii_lowercase().ends_with(".whl") {
+        last.split('-').next().unwrap_or("")
+    } else if let Some(stem) = strip_archive_extension(last) {
+        stem.rsplit_once('-').map_or(stem, |(name, _version)| name)
+    } else {
+        last.strip_suffix(".git").unwrap_or(last)
+    };
+    if is_valid_name(candidate) {
+        Some(candidate.to_string())
+    } else {
+        None
+    }
+}
+
+/// Normalises a requirement or `direct_url.json` URL so both can be compared:
+/// no `git+` prefix, fragment, query, `@ref` or `.git` suffix; lower-cased.
+pub fn normalize_url(url: &str) -> String {
+    let trimmed = url.trim();
+    let Some((scheme, rest)) = trimmed.split_once("://") else {
+        return trimmed.to_ascii_lowercase();
+    };
+    let scheme = scheme.rsplit('+').next().unwrap_or(scheme);
+    let rest = rest.split(['#', '?']).next().unwrap_or(rest);
+    let rest = rest.trim_end_matches('/');
+    let rest = match (rest.rfind('@'), rest.rfind('/')) {
+        (Some(at), Some(slash)) if at > slash => &rest[..at],
+        _ => rest,
+    };
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    format!("{scheme}://{rest}").to_ascii_lowercase()
+}
+
+/// `true` for lines that are a bare URL (`git+https://...`) rather than
+/// `name @ url`.
+fn is_bare_url(text: &str) -> bool {
+    match text.split_whitespace().next() {
+        Some(first) => match first.find("://") {
+            Some(index) => !first[..index].contains('@'),
+            None => false,
+        },
+        None => false,
     }
 }
 
@@ -163,6 +282,7 @@ impl FromStr for Requirement {
             url,
             marker,
             origin: Origin::default(),
+            name_guessed: false,
         })
     }
 }
@@ -245,7 +365,12 @@ fn parse_into(
             None => line,
         };
 
-        match Requirement::from_str(requirement_text) {
+        let attempt = if is_bare_url(requirement_text) {
+            Requirement::from_bare_url(requirement_text)
+        } else {
+            Requirement::from_str(requirement_text)
+        };
+        match attempt {
             Ok(mut req) => {
                 req.origin = Origin {
                     file: path.to_path_buf(),
@@ -414,9 +539,43 @@ mod tests {
             .iter()
             .map(|r| r.name.as_str())
             .collect();
-        assert_eq!(names, ["requests", "rich", "numpy"]);
-        assert_eq!(parsed.warnings.len(), 2, "{:?}", parsed.warnings);
+        assert_eq!(names, ["requests", "rich", "numpy", "b"]);
+        // Only the editable install is unsupported; the git+ URL is understood.
+        assert_eq!(parsed.warnings.len(), 1, "{:?}", parsed.warnings);
         assert_eq!(parsed.requirements[2].install_spec(), "numpy==1.26.0");
+    }
+
+    #[test]
+    fn understands_bare_vcs_and_archive_urls() {
+        let name = |u: &str| Requirement::from_bare_url(u).map(|r| r.name);
+        assert_eq!(name("git+https://github.com/cumulus13/files.im").as_deref(), Ok("files.im"));
+        assert_eq!(name("git+https://github.com/cumulus13/mimelist.git").as_deref(), Ok("mimelist"));
+        assert_eq!(name("git+https://github.com/a/b.git@v1.0").as_deref(), Ok("b"));
+        assert_eq!(name("git+https://x.com/a/b.git#egg=Real_Name").as_deref(), Ok("Real_Name"));
+        assert_eq!(name("https://example.com/dl/pkg-1.0-py3-none-any.whl").as_deref(), Ok("pkg"));
+        assert_eq!(name("https://example.com/dl/my_pkg-1.2.3.tar.gz").as_deref(), Ok("my_pkg"));
+        assert!(Requirement::from_bare_url("https://example.com/").is_err());
+
+        let r = Requirement::from_bare_url("git+https://github.com/a/b").unwrap_or_else(|e| panic!("{e}"));
+        assert!(r.name_guessed);
+        assert_eq!(r.install_spec(), "git+https://github.com/a/b");
+    }
+
+    #[test]
+    fn bare_url_detection_ignores_name_at_url_form() {
+        assert!(is_bare_url("git+ssh://git@github.com/a/b.git"));
+        assert!(!is_bare_url("pkg @ https://example.com/p.zip"));
+        assert!(!is_bare_url("pkg@https://example.com/p.zip"));
+        assert!(!is_bare_url("requests>=2"));
+    }
+
+    #[test]
+    fn normalises_urls_for_comparison() {
+        assert_eq!(
+            normalize_url("git+https://github.com/Cumulus13/mimelist.git@main#egg=x"),
+            normalize_url("https://github.com/cumulus13/mimelist"),
+        );
+        assert_eq!(normalize_url("https://h.com/a/b/"), "https://h.com/a/b");
     }
 
     #[test]

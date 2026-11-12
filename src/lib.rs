@@ -75,6 +75,7 @@ fn notify_if_requested(cli: &Cli, title: &str, body: &str) {
 /// Errors (bad usage, missing files, no Python interpreter, ...) are returned
 /// as `Err`; the binary prints them and exits with status 2.
 pub fn run(cli: &Cli) -> Result<ExitCode> {
+    report::set_color_mode(cli.color);
     init_logging(cli.debug);
     if !cli.pypi.is_empty() {
         return run_pypi(cli);
@@ -95,7 +96,7 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
     }
     let parsed = requirement::parse_file(&cli.file)?;
     for warning in &parsed.warnings {
-        eprintln!("warning: {warning}");
+        report::warn(warning);
     }
     if parsed.requirements.is_empty() && !cli.json {
         eprintln!("No requirements found in {}", cli.file.display());
@@ -127,7 +128,10 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
     if !cli.no_show {
         report::print_table(&results);
     }
-    report::emit(&format!("Summary: {}", summary.line()));
+    report::emit(&format!(
+        "Summary: {}",
+        summary.line(report::stdout_color())
+    ));
 
     if summary.problems() == 0 {
         notify_if_requested(cli, "reqtidy", "All requirements are satisfied");
@@ -174,7 +178,7 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
     let backend = Installer::resolve(cli.installer, &interpreter.path)?;
     let outcome = installer::execute(backend, &interpreter.path, &specs, &options);
     for spec in &outcome.failed {
-        eprintln!("✖ failed to install {spec}");
+        report::warn(&format!("failed to install {spec}"));
     }
 
     let installed = interpreter.installed_packages()?;
@@ -183,7 +187,10 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
     if !cli.no_show {
         report::print_table(&results);
     }
-    report::emit(&format!("Summary: {}", after.line()));
+    report::emit(&format!(
+        "Summary: {}",
+        after.line(report::stdout_color())
+    ));
 
     let body = format!(
         "{} installed, {} failed, {} still unsatisfied",
@@ -203,6 +210,7 @@ fn run_pypi(cli: &Cli) -> Result<ExitCode> {
 
     for name in &cli.pypi {
         let current = installed
+            .versions
             .get(&requirement::normalize_name(name))
             .map(String::as_str);
         let (latest, emoji, detail, color) = match pypi::fetch_latest(name) {
@@ -264,7 +272,7 @@ fn run_scan(cli: &Cli, dir: &Path) -> Result<ExitCode> {
     let requirements = if cli.file.is_file() {
         let parsed = requirement::parse_file(&cli.file)?;
         for warning in &parsed.warnings {
-            eprintln!("warning: {warning}");
+            report::warn(warning);
         }
         parsed.requirements
     } else {

@@ -13,4 +13,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - Status table, interactive install flow, batch install with per-package
   fallback and retry, `pip` and `uv` backends.
 - `--check` / `--json` for CI, `--pypi` comparison, `--scan` for missing imports.
+- Bare `git+https://...` / URL requirements, matched via `direct_url.json`.
+- Colored output (`--color`, `NO_COLOR` aware): table, summary, warnings, errors.
 - Optional desktop notifications (`notify` feature).

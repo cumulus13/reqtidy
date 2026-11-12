@@ -14,7 +14,7 @@ fn main() -> ExitCode {
     match reqtidy::run(&cli) {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("error: {error:#}");
+            reqtidy::report::print_error(&format!("{error:#}"));
             ExitCode::from(2)
         }
     }

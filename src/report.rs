@@ -1,6 +1,7 @@
-//! Rendering of results: terminal tables, summaries and JSON.
+//! Rendering of results: terminal tables, colors, summaries and JSON.
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
@@ -8,6 +9,94 @@ use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 use serde::Serialize;
 
 use crate::check::{CheckResult, Status};
+use crate::cli::ColorMode;
+
+static COLOR_MODE: AtomicU8 = AtomicU8::new(0);
+
+/// Sets the global color policy (`--color`).
+pub fn set_color_mode(mode: ColorMode) {
+    let value = match mode {
+        ColorMode::Auto => 0,
+        ColorMode::Always => 1,
+        ColorMode::Never => 2,
+    };
+    COLOR_MODE.store(value, Ordering::Relaxed);
+}
+
+/// Decides whether to emit colors for a stream.
+///
+/// In `auto` mode colors are used only for terminals, when `NO_COLOR` is unset
+/// and `TERM` is not `dumb`.
+pub fn color_enabled(stream_is_terminal: bool) -> bool {
+    match COLOR_MODE.load(Ordering::Relaxed) {
+        1 => true,
+        2 => false,
+        _ => {
+            stream_is_terminal
+                && std::env::var_os("NO_COLOR").is_none()
+                && !matches!(std::env::var("TERM").as_deref(), Ok("dumb"))
+        }
+    }
+}
+
+/// Whether stdout should be colored.
+pub fn stdout_color() -> bool {
+    color_enabled(io::stdout().is_terminal())
+}
+
+/// Whether stderr should be colored.
+pub fn stderr_color() -> bool {
+    color_enabled(io::stderr().is_terminal())
+}
+
+/// A text style for [`paint`].
+#[derive(Debug, Clone, Copy)]
+pub enum Style {
+    /// Bold.
+    Bold,
+    /// Dim.
+    Dim,
+    /// Red.
+    Red,
+    /// Green.
+    Green,
+    /// Yellow.
+    Yellow,
+    /// Cyan.
+    Cyan,
+}
+
+impl Style {
+    fn code(self) -> &'static str {
+        match self {
+            Style::Bold => "1",
+            Style::Dim => "2",
+            Style::Red => "31",
+            Style::Green => "32",
+            Style::Yellow => "33",
+            Style::Cyan => "36",
+        }
+    }
+}
+
+/// Wraps `text` in ANSI escapes when `enabled`.
+pub fn paint(text: &str, style: Style, enabled: bool) -> String {
+    if enabled {
+        format!("\x1b[{}m{}\x1b[0m", style.code(), text)
+    } else {
+        text.to_string()
+    }
+}
+
+/// Prints `warning: message` to stderr.
+pub fn warn(message: &str) {
+    eprintln!("{} {message}", paint("warning:", Style::Yellow, stderr_color()));
+}
+
+/// Prints `error: message` to stderr.
+pub fn print_error(message: &str) {
+    eprintln!("{} {message}", paint("error:", Style::Red, stderr_color()));
+}
 
 /// Writes a line to stdout, ignoring errors such as a closed pipe (`| head`).
 pub fn emit(text: &str) {
@@ -22,9 +111,18 @@ pub fn new_table(header: &[&str]) -> Table {
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic);
+    if stdout_color() {
+        table.enforce_styling();
+    } else {
+        table.force_no_tty();
+    }
     let cells: Vec<Cell> = header
         .iter()
-        .map(|h| Cell::new(*h).add_attribute(Attribute::Bold))
+        .map(|h| {
+            Cell::new(*h)
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Cyan)
+        })
         .collect();
     table.set_header(cells);
     table
@@ -46,15 +144,18 @@ pub fn print_table(results: &[CheckResult]) {
     for r in results {
         let color = status_color(r.status);
         table.add_row(vec![
-            Cell::new(&r.name),
-            Cell::new(r.installed.as_deref().unwrap_or("none")),
+            Cell::new(&r.name).add_attribute(Attribute::Bold),
+            Cell::new(r.installed.as_deref().unwrap_or("none")).fg(color),
             Cell::new(&r.required),
             Cell::new(r.status.emoji()),
             Cell::new(&r.detail).fg(color),
         ]);
     }
     emit("");
-    emit("                Package Version Checker");
+    emit(&format!(
+        "                {}",
+        paint("Package Version Checker", Style::Bold, stdout_color())
+    ));
     emit(&table.to_string());
 }
 
@@ -94,12 +195,24 @@ impl Summary {
         self.missing + self.mismatch
     }
 
-    /// One-line human readable summary.
-    pub fn line(&self) -> String {
-        format!(
-            "{} ok, {} missing, {} mismatched, {} skipped, {} unverifiable",
-            self.ok, self.missing, self.mismatch, self.skipped, self.unverifiable
-        )
+    /// One-line human readable summary, optionally colored.
+    pub fn line(&self, colored: bool) -> String {
+        let part = |count: usize, label: &str, style: Style| {
+            let text = format!("{count} {label}");
+            if count == 0 {
+                paint(&text, Style::Dim, colored)
+            } else {
+                paint(&text, style, colored)
+            }
+        };
+        [
+            part(self.ok, "ok", Style::Green),
+            part(self.missing, "missing", Style::Red),
+            part(self.mismatch, "mismatched", Style::Yellow),
+            part(self.skipped, "skipped", Style::Cyan),
+            part(self.unverifiable, "unverifiable", Style::Cyan),
+        ]
+        .join(", ")
     }
 }
 

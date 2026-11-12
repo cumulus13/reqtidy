@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{bail, Context, Result};
 
-use crate::requirement::normalize_name;
+use crate::requirement::{normalize_name, normalize_url};
 
 /// Prints the PEP 508 marker environment as JSON (reference implementation
 /// from the PEP).
@@ -46,7 +46,7 @@ print(json.dumps({
 }))
 "#;
 
-/// Prints `[[name, version], ...]` for every installed distribution.
+/// Prints `[[name, version, direct_url_or_null], ...]` for every installed distribution.
 pub const INSTALLED_SCRIPT: &str = r#"
 import json
 try:
@@ -61,10 +61,27 @@ for dist in md.distributions():
         version = dist.version
     except Exception:
         continue
-    if name and version:
-        rows.append([name, version])
+    if not (name and version):
+        continue
+    url = None
+    try:
+        raw = dist.read_text("direct_url.json")
+        if raw:
+            url = json.loads(raw).get("url")
+    except Exception:
+        url = None
+    rows.append([name, version, url])
 print(json.dumps(rows))
 "#;
+
+/// What is installed in an environment.
+#[derive(Debug, Default, Clone)]
+pub struct Installed {
+    /// Normalised distribution name -> version.
+    pub versions: HashMap<String, String>,
+    /// Normalised source URL (for VCS/URL installs, from `direct_url.json`) -> version.
+    pub urls: HashMap<String, String>,
+}
 
 /// A usable Python interpreter together with its marker environment.
 #[derive(Debug, Clone)]
@@ -161,16 +178,25 @@ impl Interpreter {
             .unwrap_or("unknown")
     }
 
-    /// Installed distributions as `normalised name -> version`.
-    pub fn installed_packages(&self) -> Result<HashMap<String, String>> {
+    /// Lists the distributions installed in this interpreter's environment.
+    pub fn installed_packages(&self) -> Result<Installed> {
         let json = run_python(&self.path, INSTALLED_SCRIPT, &[])?;
-        let rows: Vec<(String, String)> = serde_json::from_str(&json)
+        let rows: Vec<(String, String, Option<String>)> = serde_json::from_str(&json)
             .context("unexpected output while listing installed packages")?;
-        let mut map = HashMap::with_capacity(rows.len());
-        for (name, version) in rows {
+        let mut installed = Installed::default();
+        for (name, version, url) in rows {
+            if let Some(url) = url {
+                installed
+                    .urls
+                    .entry(normalize_url(&url))
+                    .or_insert_with(|| version.clone());
+            }
             // The first hit wins, matching Python's import precedence.
-            map.entry(normalize_name(&name)).or_insert(version);
+            installed
+                .versions
+                .entry(normalize_name(&name))
+                .or_insert(version);
         }
-        Ok(map)
+        Ok(installed)
     }
 }
