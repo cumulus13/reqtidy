@@ -117,7 +117,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Minimum supported Rust version: **1.85**.
+Minimum supported Rust version: **1.88**.
 
 ## Releasing
 

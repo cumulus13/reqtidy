@@ -24,7 +24,8 @@ jobs:
         shell: bash
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          crate_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          crate_version="$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           echo "tag=$tag_version crate=$crate_version"
           if [ "$tag_version" != "$crate_version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version"

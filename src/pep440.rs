@@ -324,7 +324,7 @@ impl FromStr for Version {
             if label.is_empty() {
                 return Err(bad_version(input));
             }
-            for seg in label.split(|c: char| matches!(c, '.' | '-' | '_')) {
+            for seg in label.split(['.', '-', '_']) {
                 if seg.is_empty() || !seg.chars().all(|c| c.is_ascii_alphanumeric()) {
                     return Err(bad_version(input));
                 }

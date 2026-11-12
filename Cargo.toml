@@ -1,8 +1,8 @@
 [package]
-name = "version"
+name = "reqtidy"
 reqtidy = "0.1.3"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 resolver = "3"
 authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
 description = "Fast Python requirements checker: validates, installs and tidies project dependencies. A Rust rewrite of cumulus13/pipr."
