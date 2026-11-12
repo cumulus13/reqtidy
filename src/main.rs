@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use clap_version_flag::colorful_version;
+use std::ffi::OsString;
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
