@@ -1,0 +1,66 @@
+[package]
+name = "reqtidy"
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.85"
+resolver = "3"
+authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
+description = "Fast Python requirements checker: validates, installs and tidies project dependencies. A Rust rewrite of cumulus13/pipr."
+license = "MIT"
+repository = "https://github.com/cumulus13/reqtidy"
+homepage = "https://github.com/cumulus13/reqtidy"
+documentation = "https://docs.rs/reqtidy"
+readme = "README.md"
+keywords = ["python", "requirements", "pip", "dependencies", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [".github/", ".gitignore"]
+
+[lib]
+name = "reqtidy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "reqtidy"
+path = "src/main.rs"
+
+[features]
+default = []
+# Desktop notifications (replacement for the Growl support of the Python original).
+notify = ["dep:notify-rust"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+clap-version-flag = "1.0.7"
+clap-color-help = "0.1.3"
+comfy-table = "7"
+env_logger = "0.11"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ureq = { version = "2.10", features = ["json"] }
+walkdir = "2"
+notify-rust = { version = "4", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Lets `cargo binstall reqtidy` download the prebuilt binaries from GitHub Releases.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
+bin-dir = "{ name }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
