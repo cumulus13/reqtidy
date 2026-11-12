@@ -4,8 +4,8 @@ use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
-use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::presets::UTF8_FULL_CONDENSED;
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, TableComponent};
 use serde::Serialize;
 
 use crate::check::{CheckResult, Status};
@@ -108,9 +108,11 @@ pub fn emit(text: &str) {
 pub fn new_table(header: &[&str]) -> Table {
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
+        .load_preset(UTF8_FULL_CONDENSED)
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic);
+    // The condensed preset has no lines between rows; make the column lines solid.
+    table.set_style(TableComponent::VerticalLines, '│');
     if stdout_color() {
         table.enforce_styling();
     } else {

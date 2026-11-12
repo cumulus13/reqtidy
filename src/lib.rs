@@ -15,6 +15,7 @@
 //! * [`installer`] – installing through `pip` or `uv`
 //! * [`scan`] – finding imports that are missing from the requirements
 //! * [`pypi`] – looking up the latest release on pypi.org
+//! * [`spinner`] – the `console.status`-style progress indicator
 
 pub mod check;
 pub mod cli;
@@ -27,6 +28,7 @@ pub mod python;
 pub mod report;
 pub mod requirement;
 pub mod scan;
+pub mod spinner;
 
 use std::io::IsTerminal;
 use std::path::Path;
@@ -103,13 +105,17 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
-    let interpreter = Interpreter::discover(cli.python.as_deref())?;
+    let (interpreter, installed) = {
+        let _spinner = spinner::Spinner::start("Checking installed packages…");
+        let interpreter = Interpreter::discover(cli.python.as_deref())?;
+        let installed = interpreter.installed_packages()?;
+        (interpreter, installed)
+    };
     log::debug!(
         "python {} at {}",
         interpreter.version(),
         interpreter.path.display()
     );
-    let installed = interpreter.installed_packages()?;
     let mut results = check::check_all(&parsed.requirements, &interpreter.markers, &installed);
     let summary = Summary::of(&results);
 
@@ -181,7 +187,10 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
         report::warn(&format!("failed to install {spec}"));
     }
 
-    let installed = interpreter.installed_packages()?;
+    let installed = {
+        let _spinner = spinner::Spinner::start("Verifying the installation…");
+        interpreter.installed_packages()?
+    };
     results = check::check_all(&parsed.requirements, &interpreter.markers, &installed);
     let after = Summary::of(&results);
     if !cli.no_show {
@@ -203,8 +212,10 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
 }
 
 fn run_pypi(cli: &Cli) -> Result<ExitCode> {
-    let interpreter = Interpreter::discover(cli.python.as_deref())?;
-    let installed = interpreter.installed_packages()?;
+    let installed = {
+        let _spinner = spinner::Spinner::start("Checking installed packages…");
+        Interpreter::discover(cli.python.as_deref())?.installed_packages()?
+    };
     let mut table = report::new_table(&["Package", "Installed", "Latest on PyPI", "", "Status"]);
     let mut failures = 0usize;
 
@@ -213,7 +224,11 @@ fn run_pypi(cli: &Cli) -> Result<ExitCode> {
             .versions
             .get(&requirement::normalize_name(name))
             .map(String::as_str);
-        let (latest, emoji, detail, color) = match pypi::fetch_latest(name) {
+        let lookup = {
+            let _spinner = spinner::Spinner::start(&format!("Looking up {name} on PyPI…"));
+            pypi::fetch_latest(name)
+        };
+        let (latest, emoji, detail, color) = match lookup {
             Ok(Some(info)) => {
                 let latest = info.version;
                 let (emoji, detail, color) = match current {
@@ -283,7 +298,10 @@ fn run_scan(cli: &Cli, dir: &Path) -> Result<ExitCode> {
         Vec::new()
     };
 
-    let found = scan::run(&interpreter, dir, cli.recursive, &requirements)?;
+    let found = {
+        let _spinner = spinner::Spinner::start("Scanning imports…");
+        scan::run(&interpreter, dir, cli.recursive, &requirements)?
+    };
     if cli.json {
         report::emit(&serde_json::to_string_pretty(&found)?);
     } else {
