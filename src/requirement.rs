@@ -396,17 +396,13 @@ fn parse_into(
 /// Decodes file bytes as UTF-8 or UTF-16 (PowerShell's `>` writes UTF-16 LE).
 fn decode_text(bytes: &[u8]) -> Result<String> {
     if let Some(body) = bytes.strip_prefix(&[0xFF, 0xFE]) {
-        let units: Vec<u16> = body
-            .chunks_exact(2)
-            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-            .collect();
+        let (pairs, _trailing) = body.as_chunks::<2>();
+        let units: Vec<u16> = pairs.iter().map(|pair| u16::from_le_bytes(*pair)).collect();
         return String::from_utf16(&units).context("invalid UTF-16LE data");
     }
     if let Some(body) = bytes.strip_prefix(&[0xFE, 0xFF]) {
-        let units: Vec<u16> = body
-            .chunks_exact(2)
-            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
-            .collect();
+        let (pairs, _trailing) = body.as_chunks::<2>();
+        let units: Vec<u16> = pairs.iter().map(|pair| u16::from_be_bytes(*pair)).collect();
         return String::from_utf16(&units).context("invalid UTF-16BE data");
     }
     let body = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
