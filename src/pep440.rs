@@ -614,7 +614,13 @@ mod tests {
     #[test]
     fn orders_like_pep440() {
         let order = [
-            "1.0.dev1", "1.0a1", "1.0b2", "1.0rc1", "1.0", "1.0.post1", "1.1",
+            "1.0.dev1",
+            "1.0a1",
+            "1.0b2",
+            "1.0rc1",
+            "1.0",
+            "1.0.post1",
+            "1.1",
         ];
         for pair in order.windows(2) {
             assert!(v(pair[0]) < v(pair[1]), "{} < {}", pair[0], pair[1]);

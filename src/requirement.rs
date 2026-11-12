@@ -223,7 +223,10 @@ impl FromStr for Requirement {
             .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')))
             .unwrap_or(s.len());
         let name = &s[..name_end];
-        let starts_ok = name.chars().next().is_some_and(|c| c.is_ascii_alphanumeric());
+        let starts_ok = name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric());
         let ends_ok = name
             .chars()
             .next_back()
@@ -266,12 +269,9 @@ impl FromStr for Requirement {
             }
         };
 
-        let specifiers =
-            SpecifierSet::from_str(spec_src).map_err(|e| err(&e.to_string()))?;
+        let specifiers = SpecifierSet::from_str(spec_src).map_err(|e| err(&e.to_string()))?;
         let marker = match marker_src {
-            Some(m) if !m.is_empty() => {
-                Some(Marker::from_str(m).map_err(|e| err(&e.to_string()))?)
-            }
+            Some(m) if !m.is_empty() => Some(Marker::from_str(m).map_err(|e| err(&e.to_string()))?),
             _ => None,
         };
 
@@ -384,9 +384,9 @@ fn parse_into(
                 } else {
                     ""
                 };
-                parsed
-                    .warnings
-                    .push(format!("{here}: unsupported requirement, skipped: {e}{hint}"));
+                parsed.warnings.push(format!(
+                    "{here}: unsupported requirement, skipped: {e}{hint}"
+                ));
             }
         }
     }
@@ -506,7 +506,15 @@ mod tests {
 
     #[test]
     fn rejects_bad_lines() {
-        for bad in ["", "=1.0", "foo==", "foo bar", "./local/path", "foo[bar", "pkg @"] {
+        for bad in [
+            "",
+            "=1.0",
+            "foo==",
+            "foo bar",
+            "./local/path",
+            "foo[bar",
+            "pkg @",
+        ] {
             assert!(Requirement::from_str(bad).is_err(), "{bad:?} should fail");
         }
     }
@@ -544,15 +552,34 @@ mod tests {
     #[test]
     fn understands_bare_vcs_and_archive_urls() {
         let name = |u: &str| Requirement::from_bare_url(u).map(|r| r.name);
-        assert_eq!(name("git+https://github.com/cumulus13/files.im").as_deref(), Ok("files.im"));
-        assert_eq!(name("git+https://github.com/cumulus13/mimelist.git").as_deref(), Ok("mimelist"));
-        assert_eq!(name("git+https://github.com/a/b.git@v1.0").as_deref(), Ok("b"));
-        assert_eq!(name("git+https://x.com/a/b.git#egg=Real_Name").as_deref(), Ok("Real_Name"));
-        assert_eq!(name("https://example.com/dl/pkg-1.0-py3-none-any.whl").as_deref(), Ok("pkg"));
-        assert_eq!(name("https://example.com/dl/my_pkg-1.2.3.tar.gz").as_deref(), Ok("my_pkg"));
+        assert_eq!(
+            name("git+https://github.com/cumulus13/files.im").as_deref(),
+            Ok("files.im")
+        );
+        assert_eq!(
+            name("git+https://github.com/cumulus13/mimelist.git").as_deref(),
+            Ok("mimelist")
+        );
+        assert_eq!(
+            name("git+https://github.com/a/b.git@v1.0").as_deref(),
+            Ok("b")
+        );
+        assert_eq!(
+            name("git+https://x.com/a/b.git#egg=Real_Name").as_deref(),
+            Ok("Real_Name")
+        );
+        assert_eq!(
+            name("https://example.com/dl/pkg-1.0-py3-none-any.whl").as_deref(),
+            Ok("pkg")
+        );
+        assert_eq!(
+            name("https://example.com/dl/my_pkg-1.2.3.tar.gz").as_deref(),
+            Ok("my_pkg")
+        );
         assert!(Requirement::from_bare_url("https://example.com/").is_err());
 
-        let r = Requirement::from_bare_url("git+https://github.com/a/b").unwrap_or_else(|e| panic!("{e}"));
+        let r = Requirement::from_bare_url("git+https://github.com/a/b")
+            .unwrap_or_else(|e| panic!("{e}"));
         assert!(r.name_guessed);
         assert_eq!(r.install_spec(), "git+https://github.com/a/b");
     }
