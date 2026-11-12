@@ -53,10 +53,7 @@ impl Installer {
                 if pip_available(python) {
                     Ok(Installer::Pip)
                 } else {
-                    bail!(
-                        "`{} -m pip` is not available; try --installer uv",
-                        python.display()
-                    )
+                    bail!("`{} -m pip` is not available; try --installer uv", python.display())
                 }
             }
             InstallerChoice::Uv => {
@@ -241,10 +238,7 @@ fn install_one(installer: Installer, python: &Path, spec: &str, options: &Option
     let single = [spec.to_string()];
     let mut attempt = 1;
     loop {
-        eprintln!(
-            "→ Installing {spec} with {} (attempt {attempt})",
-            installer.name()
-        );
+        eprintln!("→ Installing {spec} with {} (attempt {attempt})", installer.name());
         if installer.run(python, &single) {
             return true;
         }
@@ -276,11 +270,7 @@ pub fn execute(
         return summary;
     }
     if specs.len() > 1 {
-        eprintln!(
-            "→ Installing {} packages with {}…",
-            specs.len(),
-            installer.name()
-        );
+        eprintln!("→ Installing {} packages with {}…", specs.len(), installer.name());
         if installer.run(python, specs) {
             summary.succeeded.extend_from_slice(specs);
             return summary;
@@ -343,27 +333,12 @@ mod tests {
     fn builds_pip_and_uv_commands() {
         let specs = vec!["numpy>=1.20".to_string()];
         let pip = Installer::Pip.command(Path::new("python3"), &specs);
-        let args: Vec<_> = pip
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args: Vec<_> = pip.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(args, ["-m", "pip", "install", "numpy>=1.20"]);
 
         let uv = Installer::Uv.command(Path::new("/venv/bin/python"), &specs);
         assert_eq!(uv.get_program(), "uv");
-        let args: Vec<_> = uv
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
-        assert_eq!(
-            args,
-            [
-                "pip",
-                "install",
-                "--python",
-                "/venv/bin/python",
-                "numpy>=1.20"
-            ]
-        );
+        let args: Vec<_> = uv.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(args, ["pip", "install", "--python", "/venv/bin/python", "numpy>=1.20"]);
     }
 }

@@ -129,9 +129,7 @@ mod tests {
 
     #[test]
     fn parses_flags() {
-        let cli = Cli::parse_from([
-            "reqtidy", "-F", "-f", "-i", "rich", "-i", "requests", "req.txt",
-        ]);
+        let cli = Cli::parse_from(["reqtidy", "-F", "-f", "-i", "rich", "-i", "requests", "req.txt"]);
         assert!(cli.force_install && cli.force_retry);
         assert_eq!(cli.pypi, ["rich", "requests"]);
         assert_eq!(cli.file, PathBuf::from("req.txt"));

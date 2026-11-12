@@ -147,7 +147,10 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
         notify_if_requested(
             cli,
             "reqtidy",
-            &format!("{} unsatisfied requirement(s)", summary.problems()),
+            &format!(
+                "{} unsatisfied requirement(s)",
+                summary.problems()
+            ),
         );
         return Ok(exit_code(true));
     }
@@ -193,7 +196,10 @@ fn run_check(cli: &Cli) -> Result<ExitCode> {
     if !cli.no_show {
         report::print_table(&results);
     }
-    report::emit(&format!("Summary: {}", after.line(report::stdout_color())));
+    report::emit(&format!(
+        "Summary: {}",
+        after.line(report::stdout_color())
+    ));
 
     let body = format!(
         "{} installed, {} failed, {} still unsatisfied",
@@ -228,7 +234,9 @@ fn run_pypi(cli: &Cli) -> Result<ExitCode> {
                 let (emoji, detail, color) = match current {
                     None => ("❌", "Not installed".to_string(), Color::Red),
                     Some(cur) => match (Version::from_str(cur), Version::from_str(&latest)) {
-                        (Ok(c), Ok(l)) if c >= l => ("✅", "Up to date".to_string(), Color::Green),
+                        (Ok(c), Ok(l)) if c >= l => {
+                            ("✅", "Up to date".to_string(), Color::Green)
+                        }
                         (Ok(_), Ok(_)) => (
                             "⚠️",
                             format!("Update available: {cur} → {latest}"),
@@ -329,11 +337,7 @@ fn print_scan(found: &scan::ScanReport, requirements_file: &Path) {
         report::emit("");
         report::emit("Imports that are not installed (no package could be suggested):");
         for item in &found.unresolved {
-            report::emit(&format!(
-                "  ℹ️  {} ({})",
-                item.module,
-                item.files.join(", ")
-            ));
+            report::emit(&format!("  ℹ️  {} ({})", item.module, item.files.join(", ")));
         }
     }
     report::emit("");

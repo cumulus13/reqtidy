@@ -207,11 +207,7 @@ fn collect(root: &Path, recursive: bool) -> Collected {
             }
         };
         collected.files_scanned += 1;
-        let shown = path
-            .strip_prefix(root)
-            .unwrap_or(path)
-            .display()
-            .to_string();
+        let shown = path.strip_prefix(root).unwrap_or(path).display().to_string();
         for module in imports_in(&String::from_utf8_lossy(&bytes)) {
             collected
                 .imports
@@ -334,11 +330,8 @@ x = 1
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         let pkg = dir.path().join("mypkg");
         fs::create_dir_all(&pkg).unwrap_or_else(|e| panic!("{e}"));
-        fs::write(
-            dir.path().join("main.py"),
-            "import mypkg\nimport requests\n",
-        )
-        .unwrap_or_else(|e| panic!("{e}"));
+        fs::write(dir.path().join("main.py"), "import mypkg\nimport requests\n")
+            .unwrap_or_else(|e| panic!("{e}"));
         fs::write(pkg.join("util.py"), "import rich\nfrom . import x\n")
             .unwrap_or_else(|e| panic!("{e}"));
         let ignored = dir.path().join("venv");
