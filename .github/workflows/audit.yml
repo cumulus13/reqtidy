@@ -18,7 +18,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate Cargo.lock if the repository does not commit one
         run: test -f Cargo.lock || cargo generate-lockfile
