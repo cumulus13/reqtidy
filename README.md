@@ -141,23 +141,6 @@ package does not block the rest.
 * Growl notifications from the Python original are replaced by native desktop
   notifications behind the `notify` feature.
 
-## Development
-
-```sh
-cargo fmt --all
-cargo clippy --all-targets -- -D warnings
-cargo test
-```
-
-Minimum supported Rust version: **1.88**.
-
-## Releasing
-
-1. Bump `version` in `Cargo.toml` and add a section to `CHANGELOG.md`.
-2. Commit, then `git tag vX.Y.Z && git push --tags`.
-3. The `Release` workflow builds all binaries, creates the GitHub Release and
-   runs `cargo publish` (requires the `CARGO_REGISTRY_TOKEN` repository secret).
-
 ## License
 
 MIT. Original `pipr` © Hadi Cahyadi.
