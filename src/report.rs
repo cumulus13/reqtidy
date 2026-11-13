@@ -90,7 +90,10 @@ pub fn paint(text: &str, style: Style, enabled: bool) -> String {
 
 /// Prints `warning: message` to stderr.
 pub fn warn(message: &str) {
-    eprintln!("{} {message}", paint("warning:", Style::Yellow, stderr_color()));
+    eprintln!(
+        "{} {message}",
+        paint("warning:", Style::Yellow, stderr_color())
+    );
 }
 
 /// Prints `error: message` to stderr.
@@ -120,11 +123,7 @@ pub fn new_table(header: &[&str]) -> Table {
     }
     let cells: Vec<Cell> = header
         .iter()
-        .map(|h| {
-            Cell::new(*h)
-                .add_attribute(Attribute::Bold)
-                .fg(Color::Cyan)
-        })
+        .map(|h| Cell::new(*h).add_attribute(Attribute::Bold).fg(Color::Cyan))
         .collect();
     table.set_header(cells);
     table

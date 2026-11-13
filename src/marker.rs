@@ -375,7 +375,13 @@ mod tests {
 
     #[test]
     fn rejects_malformed_markers() {
-        for bad in ["", "python_version >=", "sys_platform == 'x", "a == 'b' c", "(a == 'b'"] {
+        for bad in [
+            "",
+            "python_version >=",
+            "sys_platform == 'x",
+            "a == 'b' c",
+            "(a == 'b'",
+        ] {
             assert!(Marker::from_str(bad).is_err(), "{bad:?} should not parse");
         }
     }
