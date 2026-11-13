@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/reqtidy/refs/heads/master/reqtidy/logo.png" width="50%" alt="logo">
+  <img src="https://raw.githubusercontent.com/cumulus13/reqtidy/refs/heads/master/logo.png" width="50%" alt="logo">
 </p>
 
 
